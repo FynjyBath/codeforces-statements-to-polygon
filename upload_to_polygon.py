@@ -284,7 +284,7 @@ def upload_problem(
             "testUseInStatements": "true",
             "testInputForStatements": sample.input_text,
             "testOutputForStatements": sample.output_text,
-            "verifyInputOutputForStatements": "true",
+            "verifyInputOutputForStatements": "false",
         }
         print(f"[Polygon] Saving sample test #{index}")
         client.call("problem.saveTest", test_params)
