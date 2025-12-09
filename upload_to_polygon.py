@@ -7,7 +7,7 @@ import string
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
@@ -113,11 +113,12 @@ def add_paragraph_breaks(text: Optional[str]) -> Optional[str]:
     return "\n\n".join(text.split("\n"))
 
 
-def clean_html_content(tag: Optional[Tag]) -> Optional[str]:
+def clean_html_content(tag: Optional[Tag], skip_classes: Optional[Set[str]] = None) -> Optional[str]:
     if not tag:
         return None
 
     block_tags = {"p", "div", "li", "ul", "ol"}
+    skip_classes_lower = {cls.lower() for cls in skip_classes} if skip_classes else set()
 
     def render(node, in_tex: bool = False) -> str:
         if isinstance(node, NavigableString):
@@ -126,6 +127,8 @@ def clean_html_content(tag: Optional[Tag]) -> Optional[str]:
             return ""
 
         classes = [cls.lower() for cls in node.get("class", []) if isinstance(cls, str)]
+        if skip_classes_lower and any(cls in skip_classes_lower for cls in classes):
+            return ""
         if any(cls.startswith("mathjax") for cls in classes):
             return ""
 
@@ -218,9 +221,19 @@ def parse_html_statements(html_path: Path) -> List[ProblemStatement]:
                     break
 
         legend_html = add_paragraph_breaks(clean_html_content(legend_tag))
-        input_html = add_paragraph_breaks(clean_html_content(statement.select_one(".input-specification")))
-        output_html = add_paragraph_breaks(clean_html_content(statement.select_one(".output-specification")))
-        note_html = add_paragraph_breaks(clean_html_content(statement.select_one(".note")))
+        input_html = add_paragraph_breaks(
+            clean_html_content(
+                statement.select_one(".input-specification"), skip_classes={"section-title"}
+            )
+        )
+        output_html = add_paragraph_breaks(
+            clean_html_content(
+                statement.select_one(".output-specification"), skip_classes={"section-title"}
+            )
+        )
+        note_html = add_paragraph_breaks(
+            clean_html_content(statement.select_one(".note"), skip_classes={"section-title"})
+        )
 
         samples: List[SampleTest] = []
         for sample in statement.select(".sample-test"):
