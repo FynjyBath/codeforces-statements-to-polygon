@@ -119,6 +119,17 @@ def clean_html_content(tag: Optional[Tag]) -> Optional[str]:
         if not isinstance(node, Tag):
             return ""
 
+        classes = [cls.lower() for cls in node.get("class", []) if isinstance(cls, str)]
+        if any(cls.startswith("mathjax") for cls in classes):
+            return ""
+
+        if node.name == "script":
+            script_type = node.get("type", "")
+            if isinstance(script_type, str) and script_type.startswith("math/"):
+                content = (node.string or "").strip()
+                return f"${content}$" if content else ""
+            return ""
+
         if node.name == "br":
             return "\n"
 
