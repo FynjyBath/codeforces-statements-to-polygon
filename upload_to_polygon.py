@@ -37,9 +37,25 @@ class PolygonClient:
         full_params = {**params, **base_params}
         full_params["apiSig"] = self._generate_signature(method, full_params)
         url = f"{self.base_url}/{method}"
-        response = requests.post(url, data=full_params, files=files)
-        response.raise_for_status()
-        payload = response.json()
+        print(f"[Polygon] Calling {method} -> {url}")
+        print(f"[Polygon] Parameters: {full_params}")
+        try:
+            response = requests.post(url, data=full_params, files=files)
+            print(f"[Polygon] Response status: {response.status_code}")
+            print(f"[Polygon] Raw response: {response.text}")
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise PolygonClientError(
+                f"Polygon API request to {method} failed with HTTP error: {exc}"
+            ) from exc
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise PolygonClientError(
+                f"Polygon API returned non-JSON response for {method}: {response.text}"
+            ) from exc
+
         if payload.get("status") != "OK":
             raise PolygonClientError(payload.get("comment", "Unknown API error"))
         return payload.get("result", {})
@@ -177,6 +193,7 @@ def upload_problem(
     print(f"Creating problem {polygon_name} for '{statement.original_title}'")
     problem_info = client.call("problem.create", {"name": polygon_name})
     problem_id = problem_info.get("id")
+    print(f"[Polygon] Created problem id={problem_id} for {polygon_name}")
 
     update_params: Dict[str, str] = {"problemId": problem_id}
     if statement.time_limit_ms is not None:
@@ -187,6 +204,7 @@ def upload_problem(
         update_params["inputFile"] = statement.input_file
     if statement.output_file:
         update_params["outputFile"] = statement.output_file
+    print(f"[Polygon] Updating problem info with: {update_params}")
     client.call("problem.updateInfo", update_params)
 
     statement_params: Dict[str, str] = {
@@ -202,6 +220,7 @@ def upload_problem(
         statement_params["output"] = statement.output_spec_html
     if statement.note_html:
         statement_params["notes"] = statement.note_html
+    print("[Polygon] Saving statement...")
     client.call("problem.saveStatement", statement_params)
 
     for index, sample in enumerate(statement.samples, start=1):
@@ -216,9 +235,11 @@ def upload_problem(
             "testOutputForStatements": sample.output_text,
             "verifyInputOutputForStatements": "true",
         }
+        print(f"[Polygon] Saving sample test #{index}")
         client.call("problem.saveTest", test_params)
 
     if commit_message:
+        print(f"[Polygon] Committing changes with message: {commit_message}")
         client.call(
             "problem.commitChanges",
             {"problemId": problem_id, "message": commit_message},
