@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+polygon.ini
+sample.html
+polygon_api.txt
+.venv/
