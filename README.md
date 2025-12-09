@@ -16,8 +16,7 @@
 [polygon]
 key = <api_key>
 secret = <api_secret>
-# base_url оставьте по умолчанию, если не используете прокси
-# base_url = https://polygon.codeforces.com/api
+base_url = https://polygon.codeforces.com/api
 ```
 
 ## Использование
@@ -26,7 +25,7 @@ secret = <api_secret>
 python upload_to_polygon.py <path_to_html> <prefix> [--config polygon.ini] [--lang russian] [--commit-message "Imported from HTML"]
 ```
 
-- `<path_to_html>` — локальный HTML файл со списком задач Codeforces (например, сохранённая страница контеста).
+- `<path_to_html>` — локальный HTML файл со списком задач Codeforces (сохранённая страница вида https://codeforces.com/contest/2174/problems).
 - `<prefix>` — префикс имён создаваемых задач. Для каждой задачи будет создано имя вида `<prefix>-a`, `<prefix>-b` и т.д.
 - `--lang` — язык текста условия для Polygon (по умолчанию `russian`).
 - `--commit-message` — комментарий при фиксации изменений в Polygon.
