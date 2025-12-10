@@ -232,8 +232,9 @@ def clean_html_content(
             source_block = node.select_one(".epigraph-source")
             text_content = "".join(render(child, current_in_tex) for child in text_block.children) if text_block else ""
             source_content = "".join(render(child, current_in_tex) for child in source_block.children) if source_block else ""
-            source_prefix = "" if source_content.startswith("---") else "--- " if source_content else ""
-            combined = f"\\epigraph{{{text_content.strip()}}}{{{source_prefix}{source_content.strip()}}}"
+            source_content_stripped = source_content.strip()
+            source_prefix = "" if source_content_stripped.startswith("---") else "--- " if source_content_stripped else ""
+            combined = f"\\epigraph{{{text_content.strip()}}}{{{source_prefix}{source_content_stripped}}}"
             return combined + "\n"
 
         children_text = "".join(render(child, current_in_tex) for child in node.children)
