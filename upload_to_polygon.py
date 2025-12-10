@@ -4,6 +4,7 @@ import argparse
 import configparser
 import hashlib
 import random
+import re
 import string
 import time
 from dataclasses import dataclass
@@ -96,32 +97,72 @@ class PolygonClient:
 
 
 def parse_time_limit(text: str) -> Optional[int]:
-    text = text.lower()
-    for token in text.split():
-        cleaned = token.replace(",", ".")
-        if cleaned.replace(".", "", 1).isdigit():
-            value = float(cleaned)
-            break
-    else:
+    normalized = text.lower().replace(",", ".")
+    match = re.search(r"(\d+(?:\.\d+)?)", normalized)
+    if not match:
         return None
-    if "millisecond" in text:
+
+    value = float(match.group(1))
+    unit_part = normalized[match.end() :]
+
+    millisecond_markers = ["millisecond", "milliseconds", "ms", "мс", "миллисек"]
+    second_markers = [
+        "second",
+        "seconds",
+        "sec",
+        "s",
+        "сек",
+        "секунд",
+        "секунда",
+        "секунды",
+        "сек.",
+        "с",
+    ]
+
+    if any(marker in unit_part for marker in millisecond_markers):
         return int(value)
-    if "second" in text:
+    if any(marker in unit_part for marker in second_markers) or unit_part.strip() == "":
         return int(value * 1000)
+
     return None
 
 
 def parse_memory_limit(text: str) -> Optional[int]:
-    parts = text.lower().split()
-    for idx, part in enumerate(parts):
-        if part.replace(".", "", 1).isdigit():
-            value = float(part)
-            unit = parts[idx + 1] if idx + 1 < len(parts) else ""
-            if unit.startswith("m"):
-                return int(value)
-            if unit.startswith("g"):
-                return int(value * 1024)
-    return None
+    normalized = text.lower().replace(",", ".")
+    match = re.search(r"(\d+(?:\.\d+)?)", normalized)
+    if not match:
+        return None
+
+    value = float(match.group(1))
+    unit_part = normalized[match.end() :]
+
+    mb_markers = [
+        "m",
+        "mb",
+        "megabyte",
+        "megabytes",
+        "мб",
+        "мегабайт",
+        "мегабайта",
+        "мегабайтов",
+    ]
+    gb_markers = [
+        "g",
+        "gb",
+        "gigabyte",
+        "gigabytes",
+        "гб",
+        "гигабайт",
+        "гигабайта",
+        "гигабайтов",
+    ]
+
+    if any(marker in unit_part for marker in mb_markers):
+        return int(value)
+    if any(marker in unit_part for marker in gb_markers):
+        return int(value * 1024)
+
+    return int(value)
 
 
 def extract_pre_text(tag: Optional[Tag]) -> str:
