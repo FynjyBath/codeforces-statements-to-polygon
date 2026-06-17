@@ -201,7 +201,8 @@ def normalize_math_text(text: str) -> str:
     }
     translation = {ord(src): repl for src, repl in replacements.items()}
     normalized = text.translate(translation)
-    return re.sub(r"\\(lt|gt)\b", lambda match: "<" if match.group(1) == "lt" else ">", normalized)
+    normalized = re.sub(r"\\(lt|gt)\b", lambda match: "<" if match.group(1) == "lt" else ">", normalized)
+    return re.sub(r"([.!?])\\(textbf|textit|texttt)\{", r"\1 \\\2{", normalized)
 
 
 def clean_html_content(
@@ -251,6 +252,26 @@ def clean_html_content(
                         return replacement
             return ""
 
+        if node.name == "table":
+            rows = []
+            for row in node.find_all("tr"):
+                cells = row.find_all(["td", "th"], recursive=False)
+                if not cells:
+                    continue
+                rows.append(["".join(render(child, in_tex) for child in cell.children).strip() for cell in cells])
+            if not rows:
+                return ""
+
+            column_count = max(len(row) for row in rows)
+            colspec = "|" + "|".join("l" for _ in range(column_count)) + "|"
+            lines = ["\\begin{center}", f"\\begin{{tabular}}{{{colspec}}}", "\\hline"]
+            for row in rows:
+                padded_row = row + [""] * (column_count - len(row))
+                lines.append(" & ".join(padded_row) + " \\\\")
+                lines.append("\\hline")
+            lines.extend(["\\end{tabular}", "\\end{center}"])
+            return "\n".join(lines) + "\n"
+
         node_is_tex = has_tex_marker(node)
         current_in_tex = in_tex or node_is_tex
 
@@ -267,7 +288,11 @@ def clean_html_content(
 
         if node.name == "span" and any(cls == "tex-font-style-it" for cls in classes):
             italic_content = "".join(render(child, current_in_tex) for child in node.children)
-            return f"\\it{{{italic_content}}}" if italic_content.strip() else ""
+            return f"\\textit{{{italic_content}}}" if italic_content.strip() else ""
+
+        if node.name == "span" and any(cls == "tex-font-style-tt" for cls in classes):
+            tt_content = "".join(render(child, current_in_tex) for child in node.children)
+            return f"\\texttt{{{tt_content}}}" if tt_content.strip() else ""
 
         if node.name == "div" and any(cls == "epigraph" for cls in classes):
             text_block = node.select_one(".epigraph-text")
@@ -447,17 +472,29 @@ def parse_html_statements(html_path: Path) -> List[ProblemStatement]:
         input_file = header.select_one(".input-file").get_text(" ", strip=True) if header and header.select_one(".input-file") else None
         output_file = header.select_one(".output-file").get_text(" ", strip=True) if header and header.select_one(".output-file") else None
 
+        legend_tags: List[Tag] = []
         legend_tag = statement.select_one(".legend")
-        if legend_tag is None:
+        if legend_tag is not None:
+            legend_tags.append(legend_tag)
+        else:
             for child in statement.find_all("div", recursive=False):
                 classes = child.get("class", [])
                 if child.get("class") is None or not set(classes).intersection(
                     {"header", "input-specification", "output-specification", "sample-tests", "note"}
                 ):
-                    legend_tag = child
-                    break
+                    legend_tags.append(child)
 
-        legend_html = add_paragraph_breaks(clean_html_content(legend_tag, resource_collector=resources))
+        if not statement.select(".sample-test"):
+            sample_tests_tag = statement.select_one(".sample-tests")
+            if sample_tests_tag is not None:
+                legend_tags.append(sample_tests_tag)
+
+        legend_parts = [
+            part
+            for part in (clean_html_content(tag, resource_collector=resources) for tag in legend_tags)
+            if part
+        ]
+        legend_html = add_paragraph_breaks("\n".join(legend_parts)) if legend_parts else None
         input_html = add_paragraph_breaks(
             clean_html_content(
                 statement.select_one(".input-specification"), skip_classes={"section-title"}, resource_collector=resources
