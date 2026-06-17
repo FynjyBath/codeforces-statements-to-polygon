@@ -200,7 +200,8 @@ def normalize_math_text(text: str) -> str:
         "⋅": "\\cdot",
     }
     translation = {ord(src): repl for src, repl in replacements.items()}
-    return text.translate(translation)
+    normalized = text.translate(translation)
+    return re.sub(r"\\(lt|gt)\b", lambda match: "<" if match.group(1) == "lt" else ">", normalized)
 
 
 def clean_html_content(
