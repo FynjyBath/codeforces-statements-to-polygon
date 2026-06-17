@@ -331,6 +331,43 @@ class SampleTest:
     output_text: str
 
 
+def extract_tabular_sample_tests(tag: Optional[Tag]) -> List[SampleTest]:
+    if not tag:
+        return []
+
+    samples: List[SampleTest] = []
+    for table in tag.select("table"):
+        rows: List[List[str]] = []
+        for row in table.find_all("tr"):
+            cells = row.find_all(["td", "th"], recursive=False)
+            if not cells:
+                continue
+            rows.append([cell.get_text("", strip=True) for cell in cells])
+
+        if len(rows) < 2:
+            continue
+
+        headers = [cell.lower() for cell in rows[0]]
+        input_index = next(
+            (idx for idx, header in enumerate(headers) if "ввод" in header or "input" in header),
+            None,
+        )
+        output_index = next(
+            (idx for idx, header in enumerate(headers) if "вывод" in header or "output" in header),
+            None,
+        )
+        if input_index is None or output_index is None or input_index == output_index:
+            continue
+
+        body = rows[1:]
+        input_lines = [row[input_index] if input_index < len(row) else "" for row in body]
+        output_lines = [row[output_index] if output_index < len(row) else "" for row in body]
+        if any(line for line in input_lines) or any(line for line in output_lines):
+            samples.append(SampleTest(input_text="\n".join(input_lines), output_text="\n".join(output_lines)))
+
+    return samples
+
+
 @dataclass
 class StatementResource:
     name: str
@@ -511,6 +548,8 @@ def parse_html_statements(html_path: Path) -> List[ProblemStatement]:
                         output_text=extract_pre_text(output_tag),
                     )
                 )
+        if not samples:
+            samples.extend(extract_tabular_sample_tests(statement.select_one(".sample-tests")))
 
         statements.append(
             ProblemStatement(
