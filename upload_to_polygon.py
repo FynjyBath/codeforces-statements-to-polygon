@@ -649,7 +649,7 @@ def upload_problem(
         print(f"[Polygon] Committing changes with message: {commit_message}")
         client.call(
             "problem.commitChanges",
-            {"problemId": problem_id, "message": commit_message},
+            {"problemId": problem_id, "message": commit_message, "minorChanges": "true"},
         )
 
 
