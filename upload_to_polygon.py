@@ -252,26 +252,6 @@ def clean_html_content(
                         return replacement
             return ""
 
-        if node.name == "table":
-            rows = []
-            for row in node.find_all("tr"):
-                cells = row.find_all(["td", "th"], recursive=False)
-                if not cells:
-                    continue
-                rows.append(["".join(render(child, in_tex) for child in cell.children).strip() for cell in cells])
-            if not rows:
-                return ""
-
-            column_count = max(len(row) for row in rows)
-            colspec = "|" + "|".join("l" for _ in range(column_count)) + "|"
-            lines = ["\\begin{center}", f"\\begin{{tabular}}{{{colspec}}}", "\\hline"]
-            for row in rows:
-                padded_row = row + [""] * (column_count - len(row))
-                lines.append(" & ".join(padded_row) + " \\\\")
-                lines.append("\\hline")
-            lines.extend(["\\end{tabular}", "\\end{center}"])
-            return "\n".join(lines) + "\n"
-
         node_is_tex = has_tex_marker(node)
         current_in_tex = in_tex or node_is_tex
 
@@ -454,6 +434,7 @@ class ProblemStatement:
     legend_html: Optional[str]
     input_spec_html: Optional[str]
     output_spec_html: Optional[str]
+    interaction_html: Optional[str]
     note_html: Optional[str]
     samples: List[SampleTest]
     resources: List[StatementResource]
@@ -472,22 +453,28 @@ def parse_html_statements(html_path: Path) -> List[ProblemStatement]:
         input_file = header.select_one(".input-file").get_text(" ", strip=True) if header and header.select_one(".input-file") else None
         output_file = header.select_one(".output-file").get_text(" ", strip=True) if header and header.select_one(".output-file") else None
 
+        def is_interaction_section(tag: Tag) -> bool:
+            section_title = tag.select_one(".section-title")
+            if section_title is None:
+                return False
+            title = section_title.get_text(" ", strip=True).lower()
+            return title in {"interaction", "interaction protocol", "протокол взаимодействия"}
+
         legend_tags: List[Tag] = []
+        interaction_tag: Optional[Tag] = None
         legend_tag = statement.select_one(".legend")
         if legend_tag is not None:
             legend_tags.append(legend_tag)
         else:
             for child in statement.find_all("div", recursive=False):
                 classes = child.get("class", [])
+                if is_interaction_section(child):
+                    interaction_tag = child
+                    continue
                 if child.get("class") is None or not set(classes).intersection(
                     {"header", "input-specification", "output-specification", "sample-tests", "note"}
                 ):
                     legend_tags.append(child)
-
-        if not statement.select(".sample-test"):
-            sample_tests_tag = statement.select_one(".sample-tests")
-            if sample_tests_tag is not None:
-                legend_tags.append(sample_tests_tag)
 
         legend_parts = [
             part
@@ -495,6 +482,9 @@ def parse_html_statements(html_path: Path) -> List[ProblemStatement]:
             if part
         ]
         legend_html = add_paragraph_breaks("\n".join(legend_parts)) if legend_parts else None
+        interaction_html = add_paragraph_breaks(
+            clean_html_content(interaction_tag, skip_classes={"section-title"}, resource_collector=resources)
+        )
         input_html = add_paragraph_breaks(
             clean_html_content(
                 statement.select_one(".input-specification"), skip_classes={"section-title"}, resource_collector=resources
@@ -533,6 +523,7 @@ def parse_html_statements(html_path: Path) -> List[ProblemStatement]:
                 legend_html=legend_html,
                 input_spec_html=input_html,
                 output_spec_html=output_html,
+                interaction_html=interaction_html,
                 note_html=note_html,
                 samples=samples,
                 resources=list(resources.resources()),
@@ -603,6 +594,8 @@ def upload_problem(
         update_params["memoryLimit"] = str(statement.memory_limit_mb)
     update_params["inputFile"] = "stdin"
     update_params["outputFile"] = "stdout"
+    if statement.interaction_html:
+        update_params["interactive"] = "true"
     print(f"[Polygon] Updating problem info with: {update_params}")
     client.call("problem.updateInfo", update_params)
 
@@ -617,6 +610,8 @@ def upload_problem(
         statement_params["input"] = statement.input_spec_html
     if statement.output_spec_html:
         statement_params["output"] = statement.output_spec_html
+    if statement.interaction_html:
+        statement_params["interaction"] = statement.interaction_html
     if statement.note_html:
         statement_params["notes"] = statement.note_html
     print("[Polygon] Saving statement...")
